@@ -230,9 +230,11 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
 
   const toggleFreeze = async (result: Result, frozen: boolean) => {
     if (frozen) {
+      // Use newValue from input field to freeze the value the user intends
+      const valueToFreeze = newValue || String(result.value);
       await api!.callPluginMethod("freeze", {
         address: result.address,
-        value: String(result.value),
+        value: valueToFreeze,
         type: getTypeFromBytes(result.number_of_bytes)
       });
     } else {
