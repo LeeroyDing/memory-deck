@@ -7,6 +7,7 @@ import {
   Router,
   ServerAPI,
   DropdownItem,
+  ToggleField,
   staticClasses,
   gamepadDialogClasses,
   joinClassNames,
@@ -14,7 +15,7 @@ import {
 
 import React, { VFC, useEffect, useState } from "react";
 
-import { FaMagic } from "react-icons/fa";
+import { FaMagic, FaRegSnowflake } from "react-icons/fa";
 
 import { NumpadInput } from "./components/NumpadInput";
 import { playSound } from "./util/util";
@@ -109,14 +110,28 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
 
   const [newValue, setNewValue] = useState<string>("0");
 
+  const [freezeEnabled, setFreezeEnabled] = useState<boolean>(false);
+
+  const [frozenList, setFrozenList] = useState<string[]>([]);
+
   const [results, setResults] = useState<any[]>([]);
 
   // When selectedProcess is updated, send the process ID to the server
   useEffect(() => {
     if (selectedProcess) {
       api?.callPluginMethod("attach", { pid: selectedProcess.pid, name: selectedProcess.name });
+      loadFrozenList();
     }
   }, [selectedProcess]);
+
+  const loadFrozenList = async () => {
+    const result = await api!.callPluginMethod("get_frozen_list", {});
+    if (result.success && result.result) {
+      // result.result is List[FrozenAddress]. Map to addresses.
+      const addresses = (result.result as any[]).map((item: any) => item.address);
+      setFrozenList(addresses);
+    }
+  }
 
   const loadProcessList = async () => {
     const result = await api!.callPluginMethod("get_processes", {});
@@ -184,11 +199,13 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
       setResults([]);
       var indexOfChangedValue = -1;
       let updatedResults = results;
+      let targetResult: Result | undefined;
 
       results.find(function(item, i){
         if(match_index !== 999) {
           if(item.address === String(address)){
             indexOfChangedValue = i;
+            targetResult = item;
           }
         } else {
           updatedResults[i]['value'] = parseInt(newValue);
@@ -197,6 +214,22 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
 
       if(match_index !== 999) {
         updatedResults[indexOfChangedValue]['value'] = parseInt(newValue);
+        
+        // Handle Freeze
+        if (freezeEnabled && targetResult) {
+          let type = "i32";
+          switch (targetResult.number_of_bytes) {
+            case 1: type = "i8"; break;
+            case 2: type = "i16"; break;
+            case 4: type = "i32"; break;
+            case 8: type = "i64"; break;
+          }
+          await api!.callPluginMethod("freeze", { address: address, value: newValue, type: type });
+        } else if (!freezeEnabled && targetResult) {
+             // For Phase 4: unfreeze logic
+             await api!.callPluginMethod("unfreeze", { address: address });
+        }
+        await loadFrozenList();
       }
 
       setResults(updatedResults);
@@ -374,6 +407,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
               <div className={gamepadDialogClasses.FieldLabelRow}>
                 <div className={gamepadDialogClasses.FieldLabel} style={{ "maxWidth": "50%", "wordBreak": "break-all" }}>
                   {result.address}
+                  {frozenList.includes(result.address) && <FaRegSnowflake style={{ marginLeft: "5px" }} />}
                 </div>
                 <div className={gamepadDialogClasses.FieldChildren} style={{ "maxWidth": "50%", "width": "100%", "wordBreak": "break-all", "textAlign": "end" }}>
                   {result.value}
@@ -401,6 +435,14 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
   const Change = (
     <PanelSection>
       <NumpadInput label="Change Value" value={newValue} onChange={(e) => setNewValue(e)} />
+      <PanelSectionRow>
+        <ToggleField
+          label="Freeze Value"
+          description="Lock the value to prevent changes."
+          checked={freezeEnabled}
+          onChange={(checked) => setFreezeEnabled(checked)}
+        />
+      </PanelSectionRow>
     </PanelSection>
   )
 

@@ -2,6 +2,9 @@ import os
 import sys
 import subprocess
 import logging
+import asyncio
+from typing import TypedDict, Dict
+
 # Little hack to allow importing of files after Decky has loaded the plugin.
 sys.path.append(os.path.dirname(__file__))
 
@@ -9,11 +12,16 @@ from scanmem import Scanmem, parse_uservalue, UserValue, MatchFlag, ScanMatchTyp
 from threading import Thread
 from ctypes import *
 
-# initiate list that will store values we want to freeze
-freeze_subprocess_list = []
+class FrozenAddress(TypedDict):
+    address: str
+    value: str
+    type: str
+    enabled: bool
 
 class Plugin:
     search_type = "auto"
+    frozen_addresses: Dict[str, FrozenAddress] = {}
+    freeze_task: asyncio.Task = None
 
     # Method to return list of process names and PIDs on the system.
     async def get_processes(self):
@@ -62,8 +70,30 @@ class Plugin:
         self.scanmem = Scanmem()
         self.scanmem.init()
         self.scanmem.set_backend()
+        
+        # Start the freeze loop
+        self.freeze_task = asyncio.create_task(self._freeze_loop())
 
         pass
+
+    async def _freeze_loop(self):
+        logging.info("Freeze loop started")
+        while True:
+            try:
+                # Iterate over a copy to allow modification during iteration if needed
+                for address, item in list(self.frozen_addresses.items()):
+                    if item['enabled']:
+                        # Construct write command: write <type> <address> <value>
+                        # e.g., write i32 0x7fff 100
+                        cmd = f"write {item['type']} {item['address']} {item['value']}"
+                        # We use exec_command but need to be careful about blocking.
+                        # For now, we assume it's fast enough.
+                        self.scanmem.exec_command(cmd)
+            except Exception as e:
+                logging.error(f"Error in freeze loop: {e}")
+            
+            # Sleep for 100ms to avoid hogging CPU but keep value frozen
+            await asyncio.sleep(0.1)
 
     async def get_num_matches(self):
         return self.scanmem.get_num_matches()
@@ -104,6 +134,7 @@ class Plugin:
 
         # self.scanmem.attach(self.pid)
         self.scanmem.reset()
+        self.frozen_addresses = {}
 
         pass
 
@@ -202,9 +233,24 @@ class Plugin:
             return self.scanmem.exec_command("set " + value)
         
 
-    async def freeze(self, address, value):
-        #TODO add ability to freeze new values. Probably create subprocess that continuously sets value. Or use the "set" scanmem command with args to keep setting it.
-        pass
+    async def freeze(self, address: str, value: str, type: str):
+        logging.info(f"Freezing address {address} to value {value} with type {type}")
+        self.frozen_addresses[address] = {
+            "address": address,
+            "value": value,
+            "type": type,
+            "enabled": True
+        }
+        return True
+
+    async def unfreeze(self, address: str):
+        logging.info(f"Unfreezing address {address}")
+        if address in self.frozen_addresses:
+            del self.frozen_addresses[address]
+        return True
+
+    async def get_frozen_list(self):
+        return list(self.frozen_addresses.values())
 
 async def main():
     # This is only executed when the plugin is run directly
