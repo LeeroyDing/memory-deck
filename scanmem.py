@@ -389,7 +389,7 @@ class Scanmem():
             python strings are wchars, sm expects byte wide ascii.
             therefore, we've got to recreate the string
         '''
-        backend.sm_execcommand(self.globals_ptr, strCmd.encode('ascii'))
+        backend.sm_backend_exec_cmd(strCmd.encode('ascii'))
 
     ''' scanmem.h '''
     ''' bool sm_init(globals_t *vars); '''

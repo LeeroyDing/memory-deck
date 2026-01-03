@@ -11,7 +11,8 @@ import {
   staticClasses,
   gamepadDialogClasses,
   joinClassNames,
-  SteamSpinner} from "decky-frontend-lib";
+  SteamSpinner
+} from "decky-frontend-lib";
 
 import React, { VFC, useEffect, useState } from "react";
 
@@ -70,16 +71,16 @@ const MatchTypes = [
 ]
 
 const SearchValueTypes = [
-  { value: "auto"  , label: "auto"   },
-  { value: "c_int8"  , label: "int8"   },
-  { value: "c_uint8" , label: "uint8"  },
-  { value: "c_int16" , label: "int16"  },
+  { value: "auto", label: "auto" },
+  { value: "c_int8", label: "int8" },
+  { value: "c_uint8", label: "uint8" },
+  { value: "c_int16", label: "int16" },
   { value: "c_uint16", label: "uint16" },
-  { value: "c_int32", label: "int32"   },
+  { value: "c_int32", label: "int32" },
   { value: "c_uint32", label: "uint32" },
-  { value: "c_float" , label: "float32"},
-  { value: "c_double", label: "float64"},
-  { value: "c_int64" , label: "int64"  },
+  { value: "c_float", label: "float32" },
+  { value: "c_double", label: "float64" },
+  { value: "c_int64", label: "int64" },
   { value: "c_uint64", label: "uint64" }
 ]
 
@@ -92,6 +93,17 @@ interface Result {
   number_of_bytes: number;
   variabel_bytes: number[]
 }
+
+// Helper to get scanmem type from number of bytes
+const getTypeFromBytes = (numBytes: number): string => {
+  switch (numBytes) {
+    case 1: return "i8";
+    case 2: return "i16";
+    case 4: return "i32";
+    case 8: return "i64";
+    default: return "i32";
+  }
+};
 
 const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
   const [processList, setProcessList] = useState<Process[]>([]);
@@ -109,8 +121,6 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
   const [loading, setLoading] = useState<boolean>(false);
 
   const [newValue, setNewValue] = useState<string>("0");
-
-  const [freezeEnabled, setFreezeEnabled] = useState<boolean>(false);
 
   const [frozenList, setFrozenList] = useState<string[]>([]);
 
@@ -197,40 +207,17 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
     if (result.success) {
       // Find the index of the changed value in the results object, update it in the UI. If "Change All", change all values.
       setResults([]);
-      var indexOfChangedValue = -1;
       let updatedResults = results;
-      let targetResult: Result | undefined;
 
-      results.find(function(item, i){
-        if(match_index !== 999) {
-          if(item.address === String(address)){
-            indexOfChangedValue = i;
-            targetResult = item;
+      results.find(function (item, i) {
+        if (match_index !== 999) {
+          if (item.address === String(address)) {
+            updatedResults[i]['value'] = parseInt(newValue);
           }
         } else {
           updatedResults[i]['value'] = parseInt(newValue);
         }
       });
-
-      if(match_index !== 999) {
-        updatedResults[indexOfChangedValue]['value'] = parseInt(newValue);
-        
-        // Handle Freeze
-        if (freezeEnabled && targetResult) {
-          let type = "i32";
-          switch (targetResult.number_of_bytes) {
-            case 1: type = "i8"; break;
-            case 2: type = "i16"; break;
-            case 4: type = "i32"; break;
-            case 8: type = "i64"; break;
-          }
-          await api!.callPluginMethod("freeze", { address: address, value: newValue, type: type });
-        } else if (!freezeEnabled && targetResult) {
-             // For Phase 4: unfreeze logic
-             await api!.callPluginMethod("unfreeze", { address: address });
-        }
-        await loadFrozenList();
-      }
 
       setResults(updatedResults);
     } else {
@@ -239,6 +226,19 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
     }
 
     setLoading(false)
+  }
+
+  const toggleFreeze = async (result: Result, frozen: boolean) => {
+    if (frozen) {
+      await api!.callPluginMethod("freeze", {
+        address: result.address,
+        value: String(result.value),
+        type: getTypeFromBytes(result.number_of_bytes)
+      });
+    } else {
+      await api!.callPluginMethod("unfreeze", { address: result.address });
+    }
+    await loadFrozenList();
   }
 
   // Load the process list when the plugin is loaded
@@ -327,7 +327,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
       <NumpadInput label="Search Value" value={searchValue} onChange={(e) => setSearchValue(e)} />
 
       <PanelSectionRow>
-      <DropdownItem
+        <DropdownItem
           label="Value Type"
           description="What type of value to search."
           menuLabel="Value Type"
@@ -401,19 +401,25 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
       {/* For every result, show a row with the address, value and a button to set */}
       {/* Example result: {'address': '0x785d1718', 'first_byte_in_child': 2019366680, 'value': 33333333, 'match_info': 0, 'number_of_bytes': 8, 'variable_bytes': [85, 160, 252, 1, 0, 0, 0, 0]} */}
       {results.map((result) => (
-        <React.Fragment>
+        <React.Fragment key={result.address}>
           <PanelSectionRow>
             <div className={FieldWithSeparator}>
               <div className={gamepadDialogClasses.FieldLabelRow}>
                 <div className={gamepadDialogClasses.FieldLabel} style={{ "maxWidth": "50%", "wordBreak": "break-all" }}>
                   {result.address}
-                  {frozenList.includes(result.address) && <FaRegSnowflake style={{ marginLeft: "5px" }} />}
                 </div>
                 <div className={gamepadDialogClasses.FieldChildren} style={{ "maxWidth": "50%", "width": "100%", "wordBreak": "break-all", "textAlign": "end" }}>
                   {result.value}
                 </div>
               </div>
             </div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ToggleField
+              label={<span><FaRegSnowflake style={{ marginRight: "5px" }} /> Freeze</span>}
+              checked={frozenList.includes(result.address)}
+              onChange={(checked) => toggleFreeze(result, checked)}
+            />
           </PanelSectionRow>
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => { setValue(result.address, result.match_index) }}>
@@ -425,24 +431,16 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ }) => {
       <br></br><br></br>
       {/* Change All button, send bogus address & index */}
       {/* I really don't like that this button looks like the regular Change buttons, but idk how to make it better */}
-      <ButtonItem layout="below" onClick={() => { setValue("0x00000", 999) }}> 
+      <ButtonItem layout="below" onClick={() => { setValue("0x00000", 999) }}>
         Change All
       </ButtonItem>
     </PanelSection>
-    
+
   )
 
   const Change = (
     <PanelSection>
       <NumpadInput label="Change Value" value={newValue} onChange={(e) => setNewValue(e)} />
-      <PanelSectionRow>
-        <ToggleField
-          label="Freeze Value"
-          description="Lock the value to prevent changes."
-          checked={freezeEnabled}
-          onChange={(checked) => setFreezeEnabled(checked)}
-        />
-      </PanelSectionRow>
     </PanelSection>
   )
 
