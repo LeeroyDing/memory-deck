@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react",
+    "jsxFactory": "React.createElement",
+    "types": ["node", "jest", "@testing-library/jest-dom"],
+    "noUnusedLocals": false
+  },
+  "include": ["src", "tests", "types.d.ts"]
+}

@@ -5,7 +5,9 @@
   "scripts": {
     "build": "shx rm -rf dist && rollup -c",
     "watch": "rollup -c -w",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:frontend": "jest",
+    "test:backend": "cd backend && python3 -m venv venv && . venv/bin/activate && pytest",
+    "test": "npm run test:frontend && npm run test:backend"
   },
   "repository": {
     "type": "git",
@@ -33,12 +35,22 @@
     "@rollup/plugin-node-resolve": "^13.3.0",
     "@rollup/plugin-replace": "^4.0.0",
     "@rollup/plugin-typescript": "^8.5.0",
-    "@types/react": "16.14.0",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^12.1.5",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^16.14.0",
+    "@types/react-dom": "^16.9.16",
     "@types/webpack": "^5.28.1",
     "decky-frontend-lib": "~3.24.1",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "react": "^16.14.0",
+    "react-dom": "^16.14.0",
     "rollup": "^2.79.1",
     "rollup-plugin-import-assets": "^1.1.1",
     "shx": "^0.3.4",
+    "ts-jest": "^29.4.6",
     "tslib": "^2.5.0",
     "typescript": "^4.9.5"
   },
