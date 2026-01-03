@@ -83,10 +83,15 @@ jobs:
           name: backend-bin
           path: .
           
+      - name: Get Version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
       - name: Prepare Release Archive
         run: |
           mkdir memory-deck
           cp plugin.json memory-deck/
+          cp package.json memory-deck/
           cp main.py memory-deck/
           cp scanmem.py memory-deck/
           cp LICENSE memory-deck/
@@ -95,10 +100,10 @@ jobs:
           cp -r bin memory-deck/
           
           # Create zip
-          zip -r memory-deck.zip memory-deck
+          zip -r memory-deck-v${{ env.VERSION }}.zip memory-deck
           
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: memory-deck.zip
+          files: memory-deck-v${{ env.VERSION }}.zip
