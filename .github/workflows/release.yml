@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+        
+      - name: Build Frontend
+        run: npm run build
+        
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+  build-backend:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/steamdeckhomebrew/holo-base:latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Build Dependencies
+        run: |
+          pacman -Sy --noconfirm base-devel git intltool
+          
+      - name: Build Scanmem
+        run: |
+          cd backend/scanmem
+          ./autogen.sh
+          ./configure --without-readline
+          make
+          
+      - name: Prepare Backend Artifact
+        run: |
+          mkdir -p backend-out/bin
+          cp backend/scanmem/.libs/libscanmem.so.1.0.0 backend-out/bin/
+          
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-bin
+          path: backend-out/
+
+  package-and-release:
+    needs: [build-frontend, build-backend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+          
+      - name: Download Backend
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-bin
+          path: .
+          
+      - name: Prepare Release Archive
+        run: |
+          mkdir memory-deck
+          cp plugin.json memory-deck/
+          cp main.py memory-deck/
+          cp scanmem.py memory-deck/
+          cp LICENSE memory-deck/
+          cp README.md memory-deck/
+          cp -r dist memory-deck/
+          cp -r bin memory-deck/
+          
+          # Create zip
+          zip -r memory-deck.zip memory-deck
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: memory-deck.zip
